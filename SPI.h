@@ -32,15 +32,24 @@ enum
 	SPI4,	//SPI4
 	NUMBER_OF_SPI_MODULES,
 };
+
+struct SPI_MASTER_STATE_MACHINE SPInStateMachine[x];
  */
 
 /************* Semantic Versioning***************/
 #define SPI_LIBRARY
 
 /*************   Magic  Numbers   ***************/
+/***********      Data Structures    ************/
+struct SPI_MASTER_STATE_MACHINE
+{
+	char *Write;
+	char *Read;
+};
+
 /*************    Enumeration     ***************/
 /*************Function  Prototypes***************/
 void SPI_Initialize(unsigned int module, volatile unsigned int *STAT, volatile unsigned int *CON1, volatile unsigned int *CON2, volatile unsigned int *BUF, unsigned int frequency, enum FREQUENCY_UNITS units);
-
+void SPI_Change_Master_State_Machine(unsigned int module, struct SPI_MASTER_STATE_MACHINE *stateMachine, unsigned char size);
 
 #endif

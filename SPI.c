@@ -1,3 +1,5 @@
+//TODO - I need something for an auto chip select
+//TODO - I need a scheduler for running multiple SPI state machines serially on a single channel
 /**************************************************************************************************
 Target Hardware:		PIC24FJ256GA1xx
 Code assumptions:
@@ -85,12 +87,25 @@ union SPInCON2bits
 	};
 };
 
+//Master Statemachine
+struct MASTER_STATE_MACHINE
+{
+	struct SPI_MASTER_STATE_MACHINE *stateMachine;
+	unsigned char sizeOfStateMachine;
+} masterStateMachine[NUMBER_OF_SPI_MODULES];
+
 /***********State Machine Definitions************/
 /*************  Global Variables  ***************/
+char masterWritePosition;
+char masterReadPosition;
+
 /*************Interrupt Prototypes***************/
+void __attribute__((__interrupt__, auto_psv)) _SPI1Interrupt(void);
+void __attribute__((__interrupt__, auto_psv)) _SPI1ERRInterrupt(void);
+
 /*************Function  Prototypes***************/
 void SPI_Write(unsigned int module, int value);
-int SPI_Read(unsigned char module);
+int SPI_Read(unsigned int module);
 int SPI_Busy(unsigned int module);
 int SPI_Error(unsigned int module);
 int SPI_Wait_To_Finish(unsigned int module, unsigned int timeLimit);
@@ -121,6 +136,12 @@ void SPI_Initialize(unsigned int module, volatile unsigned int *STAT, volatile u
 	//TODO - Use the power of automagic to determine closest achievable frequency to the target frequency
 	#warning "Use the power of automagic to determine closest achievable frequency to the target frequency"
 
+	//Enable interrups and clear any preexisting flags
+	IFS0bits.SPI1IF = 0;			//0 = Interrupt request has not occurred
+	IFS0bits.SPF1IF = 0;			//0 = Interrupt request has not occurred
+	IEC0bits.SPI1IE = 1;			//1 = Interrupt request enabled
+	IEC0bits.SPF1IE = 1;			//1 = Interrupt request enabled
+	
 	//Initialize the module
 	//SPIn Control Register 2
 	SPInCON2[module].SPIBEN = 0;	//
@@ -162,7 +183,7 @@ void SPI_Write(unsigned int module, int value)
 	return;
 }
 
-int SPI_Read(unsigned char module)
+int SPI_Read(unsigned int module)
 {
 	if(module < NUMBER_OF_SPI_MODULES)
 		return *SPInBUF[module];
@@ -197,4 +218,28 @@ int SPI_Error(unsigned int module)
 	}
 	else
 		return 2;//Module can't exist
+}
+
+void SPI_Change_Master_State_Machine(unsigned int module, struct SPI_MASTER_STATE_MACHINE *stateMachine, unsigned char size)
+{
+	if(module < NUMBER_OF_SPI_MODULES)
+	{
+		masterStateMachine[module].stateMachine = stateMachine;
+		masterStateMachine[module].sizeOfStateMachine = size;
+		masterReadPosition = 0;
+		masterWritePosition = 0;
+	}
+
+	//We're done here
+	return;
+}
+
+void __attribute__((__interrupt__, auto_psv)) _SPI1Interrupt(void)
+{
+	return;
+}
+
+void __attribute__((__interrupt__, auto_psv)) _SPI1ERRInterrupt(void)
+{
+	return;
 }
