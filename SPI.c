@@ -1,5 +1,3 @@
-//TODO - I need something for an auto chip select
-//TODO - I need a scheduler for running multiple SPI state machines serially on a single channel
 /**************************************************************************************************
 Target Hardware:		PIC24FJ256GA1xx
 Code assumptions:
@@ -101,7 +99,7 @@ char masterReadPosition;
 
 /*************Interrupt Prototypes***************/
 void __attribute__((__interrupt__, auto_psv)) _SPI1Interrupt(void);
-void __attribute__((__interrupt__, auto_psv)) _SPI1ERRInterrupt(void);
+void __attribute__((__interrupt__, auto_psv)) _SPI1ErrInterrupt(void);
 
 /*************Function  Prototypes***************/
 void SPI_Write(unsigned int module, int value);
@@ -121,7 +119,7 @@ volatile unsigned int *SPInBUF[NUMBER_OF_SPI_MODULES];
 
 /************* Other  Definitions ***************/
 
-void SPI_Initialize(unsigned int module, volatile unsigned int *STAT, volatile unsigned int *CON1, volatile unsigned int *CON2, volatile unsigned int *BUF, unsigned int frequency, enum FREQUENCY_UNITS units)
+void SPI_Initialize(unsigned int module, volatile unsigned int *STAT, volatile unsigned int *CON1, volatile unsigned int *CON2, volatile unsigned int *BUF)
 {
 	//Range checking
 	if(module >= NUMBER_OF_SPI_MODULES)
@@ -133,9 +131,6 @@ void SPI_Initialize(unsigned int module, volatile unsigned int *STAT, volatile u
 	SPInCON2[module].Register = CON2;
 	SPInBUF[module] = BUF;
 
-	//TODO - Use the power of automagic to determine closest achievable frequency to the target frequency
-	#warning "Use the power of automagic to determine closest achievable frequency to the target frequency"
-
 	//Enable interrups and clear any preexisting flags
 	IFS0bits.SPI1IF = 0;			//0 = Interrupt request has not occurred
 	IFS0bits.SPF1IF = 0;			//0 = Interrupt request has not occurred
@@ -144,7 +139,7 @@ void SPI_Initialize(unsigned int module, volatile unsigned int *STAT, volatile u
 	
 	//Initialize the module
 	//SPIn Control Register 2
-	SPInCON2[module].SPIBEN = 0;	//
+	SPInCON2[module].SPIBEN = 1;	//
 	SPInCON2[module].SPIFE = 0;		//
 	SPInCON2[module].SPIFPOL = 0;	//
 	SPInCON2[module].SPIFSD = 0;	//
@@ -153,7 +148,7 @@ void SPI_Initialize(unsigned int module, volatile unsigned int *STAT, volatile u
 	//SPIn Control Register 1
 	SPInCON1[module].PPRE = 0;		//
 	SPInCON1[module].SPRE = 0;		//
-	SPInCON1[module].MSTEN = 0;		//
+	SPInCON1[module].MSTEN = 1;		//
 	SPInCON1[module].CKP = 0;		//
 	SPInCON1[module].SSEN = 0;		//
 	SPInCON1[module].CKE = 0;		//
@@ -163,15 +158,15 @@ void SPI_Initialize(unsigned int module, volatile unsigned int *STAT, volatile u
 	SPInCON1[module].DISSCK = 0;	//
 
 	//SPIn Status Register
-	SPInSTAT[module].SPIRBF = 0;	//
-	SPInSTAT[module].SPITBF = 0;	//
-	SPInSTAT[module].SISEL = 0;		//
-	SPInSTAT[module].SRXMPT = 0;	//
-	SPInSTAT[module].SPIROV = 0;	//
-	SPInSTAT[module].SRMPT = 0;		//
-	SPInSTAT[module].SPIBEC = 0;	//
-	SPInSTAT[module].SPISIDL = 0;	//
-	SPInSTAT[module].SPIEN = 0;		//
+//	SPInSTAT[module].SPIRBF = 0;	//
+//	SPInSTAT[module].SPITBF = 0;	//
+	SPInSTAT[module].SISEL = 0b101;	//101 = Interrupt when the last bit is shifted out of SPI1SR; now the transmit is complete
+//	SPInSTAT[module].SRXMPT = 0;	//
+//	SPInSTAT[module].SPIROV = 0;	//
+//	SPInSTAT[module].SRMPT = 0;		//
+//	SPInSTAT[module].SPIBEC = 0;	//
+//	SPInSTAT[module].SPISIDL = 0;	//
+	SPInSTAT[module].SPIEN = 1;		//
 
 	return;
 }
@@ -220,11 +215,14 @@ int SPI_Error(unsigned int module)
 		return 2;//Module can't exist
 }
 
-void SPI_Change_Master_State_Machine(unsigned int module, struct SPI_MASTER_STATE_MACHINE *stateMachine, unsigned char size)
+void SPI_Change_Master_State_Machine(unsigned int module, struct SPI_MASTER_STATE_MACHINE stateMachine[], unsigned char size, unsigned int frequency, enum FREQUENCY_UNITS units)
 {
 	if(module < NUMBER_OF_SPI_MODULES)
 	{
-		masterStateMachine[module].stateMachine = stateMachine;
+		//TODO - Use the power of automagic to determine closest achievable frequency to the target frequency
+
+		masterStateMachine[module].stateMachine.Write = stateMachine[0].Write;
+		masterStateMachine[module].stateMachine.Read = stateMachine[0].Read;
 		masterStateMachine[module].sizeOfStateMachine = size;
 		masterReadPosition = 0;
 		masterWritePosition = 0;
@@ -236,10 +234,16 @@ void SPI_Change_Master_State_Machine(unsigned int module, struct SPI_MASTER_STAT
 
 void __attribute__((__interrupt__, auto_psv)) _SPI1Interrupt(void)
 {
+	while(SPI1STATbits.SR1MPT != 0)
+	{
+		*masterStateMachine[0].stateMachine->Read = SPI1BUF;
+//		masterStateMachine[0].stateMachine.(Read+masterReadPosition) = SPI1BUF;
+		//Get out and throw an error if the rx buffer still has content and our buffer is satisfied!
+	}
 	return;
 }
 
-void __attribute__((__interrupt__, auto_psv)) _SPI1ERRInterrupt(void)
+void __attribute__((__interrupt__, auto_psv)) _SPI1ErrInterrupt(void)
 {
 	return;
 }
